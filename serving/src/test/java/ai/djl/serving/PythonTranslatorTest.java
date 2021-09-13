@@ -26,16 +26,19 @@ import ai.djl.ndarray.NDManager;
 import ai.djl.repository.zoo.Criteria;
 import ai.djl.repository.zoo.ZooModel;
 import ai.djl.serving.util.ConfigManager;
+import ai.djl.serving.util.Connector;
 import ai.djl.translate.TranslateException;
 import ai.djl.util.JsonUtils;
 import ai.djl.util.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.security.GeneralSecurityException;
 import java.util.List;
 import org.apache.commons.cli.ParseException;
 import org.slf4j.Logger;
@@ -52,6 +55,9 @@ public class PythonTranslatorTest {
 
     private Path modelDir = Paths.get("build/models/mlp");
     private byte[] data;
+    private ModelServer server;
+    private Field useNativeIoField;
+    private Object previousUseNativeIoValue = true; // default value of useNativeIo is true.
 
     @BeforeClass
     public void setup() throws ModelException, IOException, ParseException {
@@ -102,8 +108,6 @@ public class PythonTranslatorTest {
         try (InputStream is = Files.newInputStream(imageFile)) {
             data = Utils.toByteArray(is);
         }
-
-        ConfigManager.init(ConfigManagerTest.parseArguments(new String[0]));
     }
 
     @AfterClass
@@ -111,20 +115,76 @@ public class PythonTranslatorTest {
         Utils.deleteQuietly(modelDir);
     }
 
-    @Test(enabled = false)
-    public void testImageClassificationTCP()
-            throws ModelException, NoSuchFieldException, IllegalAccessException, IOException,
-                    TranslateException {
-        ConfigManagerTest.setConfiguration(ConfigManager.getInstance(), "use_native_io", "false");
-        runPythonTranslator();
-    }
-
-    @Test(enabled = false)
+    @Test
     public void testImageClassificationUDS()
             throws NoSuchFieldException, IllegalAccessException, ModelException, TranslateException,
-                    IOException {
+                    IOException, GeneralSecurityException, InterruptedException, ParseException {
+
+        setUseNativeIoField(true);
+
+        ConfigManager.init(ConfigManagerTest.parseArguments(new String[0]));
         ConfigManagerTest.setConfiguration(ConfigManager.getInstance(), "use_native_io", "true");
+        ConfigManagerTest.setConfiguration(ConfigManager.getInstance(), "pythonPath", "python3");
+        ConfigManagerTest.setConfiguration(ConfigManager.getInstance(), "noOfPythonWorkers", "1");
+        ConfigManagerTest.setConfiguration(
+                ConfigManager.getInstance(), "startPythonWorker", "True");
+
+        startModelServer();
         runPythonTranslator();
+        stopModelServer();
+        resetUseNativeIoField();
+    }
+
+    @Test
+    public void testImageClassificationTCP()
+            throws ModelException, NoSuchFieldException, IllegalAccessException, IOException,
+                    TranslateException, GeneralSecurityException, InterruptedException,
+                    ParseException {
+
+        setUseNativeIoField(false);
+        ConfigManager.init(ConfigManagerTest.parseArguments(new String[0]));
+        ConfigManagerTest.setConfiguration(ConfigManager.getInstance(), "use_native_io", "false");
+        ConfigManagerTest.setConfiguration(ConfigManager.getInstance(), "pythonPath", "python3");
+        ConfigManagerTest.setConfiguration(ConfigManager.getInstance(), "noOfPythonWorkers", "5");
+        ConfigManagerTest.setConfiguration(
+                ConfigManager.getInstance(), "startPythonWorker", "True");
+        startModelServer();
+        runPythonTranslator();
+        stopModelServer();
+        resetUseNativeIoField();
+    }
+
+    private void setUseNativeIoField(boolean value) {
+        try {
+            if (ConfigManager.getInstance() != null) {
+                useNativeIoField = Connector.class.getDeclaredField("useNativeIo");
+                useNativeIoField.setAccessible(true);
+                previousUseNativeIoValue = useNativeIoField.get(null);
+                useNativeIoField.set(null, value);
+            }
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private void resetUseNativeIoField() {
+        try {
+            if (previousUseNativeIoValue != null && useNativeIoField != null) {
+                useNativeIoField.set(null, previousUseNativeIoValue);
+            }
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private void startModelServer()
+            throws GeneralSecurityException, IOException, InterruptedException {
+        server = new ModelServer(ConfigManager.getInstance());
+        server.start();
+    }
+
+    private void stopModelServer() {
+        server.stop();
     }
 
     private void runPythonTranslator() throws ModelException, IOException, TranslateException {
