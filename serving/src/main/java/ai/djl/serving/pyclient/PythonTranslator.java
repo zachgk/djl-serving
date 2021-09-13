@@ -63,9 +63,10 @@ public class PythonTranslator implements ServingTranslator {
 
     /** {@inheritDoc} */
     @Override
-    public void prepare(NDManager manager, Model model) throws IOException {
+    public void prepare(TranslatorContext ctx) throws IOException {
+        Path modelDir = ctx.getModel().getModelPath();
         String[] preProcessing = ((String) arguments.get("preProcessor")).split(":");
-        Path preProcessingPath = model.getModelPath().resolve("bin/" + preProcessing[0]);
+        Path preProcessingPath = modelDir.resolve("bin/" + preProcessing[0]);
         if (!Files.exists(preProcessingPath)) {
             throw new IOException(
                     "Specified preprocess file does not exist in the model directory");
@@ -80,7 +81,7 @@ public class PythonTranslator implements ServingTranslator {
         }
 
         String[] postProcessing = postProcessorArg.split(":");
-        Path postProcessingPath = model.getModelPath().resolve("bin/" + postProcessing[0]);
+        Path postProcessingPath = modelDir.resolve("bin/" + postProcessing[0]);
         if (!Files.exists(postProcessingPath)) {
             throw new IOException(
                     "Specified postprocess file does not exist in the model directory");
