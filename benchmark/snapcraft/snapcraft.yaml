@@ -24,12 +24,16 @@ base: core18
 grade: stable
 confinement: classic
 
+architectures:
+  - build-on: amd64
+    run-on: all
+
 apps:
   djlbench:
     command: benchmark-$SNAPCRAFT_PROJECT_VERSION/bin/benchmark
     environment:
-      JAVA_HOME: "$SNAP/usr/lib/jvm/java-11-openjdk-amd64"
-      PATH: "$SNAP/bin:$PATH:$SNAP/usr/lib/jvm/java-11-openjdk-amd64/bin"
+      JAVA_HOME: "$SNAP/usr/lib/jvm/java-11-openjdk-${SNAP_ARCH}"
+      PATH: "$SNAP/bin:$PATH:$SNAP/usr/lib/jvm/java-11-openjdk-${SNAP_ARCH}/bin"
 
 parts:
   djlbench:
